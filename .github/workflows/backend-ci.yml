@@ -53,11 +53,7 @@ jobs:
           IMAGE_NAME: ${{ secrets.DOCKER_IMAGE }}         # e.g. ghcr.io/youruser/projecthub-backend
         run: |
           echo "Building image $IMAGE_NAME:${{ github.sha }}"
-          docker buildx build \
-            --tag $IMAGE_NAME:${{ github.sha }} \
-            --tag $IMAGE_NAME:latest \
-            --push \
-            .
+          docker buildx build --tag $IMAGE_NAME:${{ github.sha }} --tag $IMAGE_NAME:latest --push .
 
   # --- DEPLOY TO ELASTIC BEANSTALK ---
   deploy-eb:
