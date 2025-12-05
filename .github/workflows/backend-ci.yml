@@ -63,8 +63,12 @@ jobs:
           IMAGE_NAME: ${{ secrets.DOCKER_IMAGE }}
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
+          REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+          REG_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          REG_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: |
           ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST "
+            echo '$REG_PASSWORD' | docker login $REGISTRY -u '$REG_USERNAME' --password-stdin &&
             docker pull $IMAGE_NAME:latest &&
             docker ps -q --filter 'name=projecthub-backend' | xargs -r docker stop &&
             docker ps -aq --filter 'name=projecthub-backend' | xargs -r docker rm &&
@@ -72,3 +76,4 @@ jobs:
               -e NODE_ENV=production \
               $IMAGE_NAME:latest
           "
+
