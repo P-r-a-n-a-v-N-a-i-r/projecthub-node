@@ -5,16 +5,15 @@ import User from '../models/User.js';
 import dotenv from 'dotenv';
 import Otp from '../models/Otp.js';
 import axios from 'axios';
+import validator from 'validator';
 
 dotenv.config();
-
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '7d';
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const oAuthClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
-
 
 function sign(user) {
   return jwt.sign(
@@ -24,76 +23,49 @@ function sign(user) {
   );
 }
 
-// Send OTP to email (can be called client-side first)
-export const sendOtp = async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ message: 'Email required' });
+// helper to sanitize+validate email from any source
+function normalizeEmail(raw) {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim().toLowerCase();
+  if (!validator.isEmail(trimmed)) return null;
+  return trimmed;
+}
 
-  // Check if the user already exists
-  const user = await User.findOne({ email });
-  if (user) {
-    return res.status(400).json({ message: 'Email is already registered' });
+// Send OTP to email
+export const sendOtp = async (req, res) => {
+  const safeEmail = normalizeEmail(req.body?.email);
+  if (!safeEmail) {
+    return res.status(400).json({ message: 'Invalid email' });
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
   try {
+    const user = await User.findOne({ email: safeEmail });
+    if (user) {
+      return res.status(400).json({ message: 'Email is already registered' });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
     await Otp.findOneAndUpdate(
-      { email },
+      { email: safeEmail },
       { otp, expiresAt },
       { upsert: true, new: true }
     );
 
-    const emailHTML = `
-      <html>
-        <body style="margin:0; padding:0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px;">
-            <tr>
-              <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
-                  <tr>
-                    <td style="background-color: #28443F; color: #fff; text-align: center; padding: 30px;">
-                      <h1 style="margin:0; font-size: 28px;">ProjectHub</h1>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 30px; color: #333; line-height: 1.6;">
-                      <p style="font-size: 16px;">
-                        Your OTP code to complete signup is:
-                      </p>
-                      <p style="text-align:center; margin: 30px 0; font-size: 24px; font-weight: bold; color: #28443F;">
-                        ${otp}
-                      </p>
-                      <p style="font-size: 14px; color: #777;">
-                        This OTP will expire in 10 minutes. If you did not request this, please ignore this email.
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="background-color: #f0f0f0; text-align: center; padding: 20px; font-size: 12px; color: #555;">
-                      &copy; ${new Date().getFullYear()} ProjectHub. All rights reserved.
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-      </html>
-    `;
+    const emailHTML = `... use ${otp} here ...`;
 
     const response = await axios.post(
       'https://api.brevo.com/v3/smtp/email',
       {
         sender: {
           name: 'ProjectHub',
-          email: 'cloudsynktech@gmail.com', // Verified sender
+          email: 'cloudsynktech@gmail.com',
         },
         to: [
           {
-            email: email,
-            name: email.split('@')[0] || 'User', // Use part before @ as placeholder
+            email: safeEmail,
+            name: safeEmail.split('@')[0] || 'User',
           }
         ],
         subject: 'Your OTP Code for ProjectHub Signup',
@@ -101,33 +73,34 @@ export const sendOtp = async (req, res) => {
       },
       {
         headers: {
-          'accept': 'application/json',
+          accept: 'application/json',
           'content-type': 'application/json',
           'api-key': process.env.BREVO_API_KEY
         }
       }
     );
-    res.json({ success: true, data: response.data });
+    return res.json({ success: true, data: response.data });
   } catch (error) {
     console.error('Error sending OTP:', error);
-    res.status(500).json({ message: 'Failed to send OTP', error: error.message });
+    return res.status(500).json({ message: 'Failed to send OTP' });
   }
 };
 
-
-
-
-// Verify OTP - called prior to registration
+// Verify OTP
 export const verifyOtp = async (req, res) => {
-  const { email, otp } = req.body;
-  if (!email || !otp) return res.status(400).json({ message: 'Email and OTP required' });
+  const safeEmail = normalizeEmail(req.body?.email);
+  const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : null;
+
+  if (!safeEmail || !otp) {
+    return res.status(400).json({ message: 'Email and OTP required' });
+  }
 
   try {
-    const record = await Otp.findOne({ email });
+    const record = await Otp.findOne({ email: safeEmail });
     if (!record) return res.status(400).json({ message: 'OTP not found' });
 
     if (record.expiresAt < Date.now()) {
-      await Otp.deleteOne({ email });
+      await Otp.deleteOne({ email: safeEmail });
       return res.status(400).json({ message: 'OTP expired' });
     }
 
@@ -135,48 +108,69 @@ export const verifyOtp = async (req, res) => {
       return res.status(400).json({ message: 'Invalid OTP' });
     }
 
-    // OTP verified, delete from DB
-    await Otp.deleteOne({ email });
-
-    res.json({ message: 'OTP verified' });
+    await Otp.deleteOne({ email: safeEmail });
+    return res.json({ message: 'OTP verified' });
   } catch (error) {
-    res.status(500).json({ message: 'OTP verification failed', error: error.message });
+    console.error('[verifyOtp] error:', error);
+    return res.status(500).json({ message: 'OTP verification failed' });
   }
 };
 
-// Register user after OTP verified
+// Register user
 export const registerUser = async (req, res) => {
   try {
     let { name, email, password, confirmPassword } = req.body || {};
-    if (!name || !email || !password || password !== confirmPassword) {
+
+    const safeEmail = normalizeEmail(email);
+    const safeName =
+      typeof name === 'string' ? name.trim() : '';
+
+    if (!safeName || !safeEmail || !password || password !== confirmPassword) {
       return res.status(400).json({ message: 'Invalid signup data' });
     }
 
-    email = email.toLowerCase();
-
-    const userExists = await User.findOne({ email });
-    if (userExists) return res.status(409).json({ message: 'Email already in use' });
+    const userExists = await User.findOne({ email: safeEmail });
+    if (userExists) {
+      return res.status(409).json({ message: 'Email already in use' });
+    }
 
     const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    const user = await User.create({ name, email, password: hash, authentication: 'email' });
+
+    const user = await User.create({
+      name: safeName,
+      email: safeEmail,
+      password: hash,
+      authentication: 'email',
+    });
 
     const token = sign(user);
-    res.status(201).json({
+    return res.status(201).json({
       token,
-      user: { _id: user._id, name: user.name, email: user.email, authentication: user.authentication },
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        authentication: user.authentication,
+      },
     });
   } catch (error) {
     console.error('[signup] error:', error);
-    res.status(500).json({ message: 'Signup failed', error: error.message });
+    return res.status(500).json({ message: 'Signup failed', error: error.message });
   }
 };
 
+
+// Login
 export const loginUser = async (req, res) => {
   try {
-    let { email, password } = req.body || {};
-    email = (email || '').toLowerCase();
+    const safeEmail = normalizeEmail(req.body?.email);
+    const password = typeof req.body?.password === 'string' ? req.body.password : null;
 
-    const user = await User.findOne({ email });
+    if (!safeEmail || !password) {
+      return res.status(400).json({ message: 'Email and password required' });
+    }
+
+    const user = await User.findOne({ email: safeEmail });
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials: user not found' });
     }
@@ -189,13 +183,14 @@ export const loginUser = async (req, res) => {
     }
 
     const token = sign(user);
-    res.json({ token, user: { _id: user._id, name: user.name, email: user.email ,authentication: user.authentication} });
+    return res.json({ token, user: { _id: user._id, name: user.name, email: user.email, authentication: user.authentication } });
   } catch (e) {
     console.error('[login] error:', e);
-    res.status(500).json({ message: 'Login failed' });
+    return res.status(500).json({ message: 'Login failed' });
   }
 };
 
+// Google login already uses Google-verified email; still normalize it
 export const googleLogin = async (req, res) => {
   try {
     const { credential } = req.body || {};
@@ -203,31 +198,28 @@ export const googleLogin = async (req, res) => {
 
     const ticket = await oAuthClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
-    const email = payload.email.toLowerCase();
-    const name = payload.name || (email && email.split('@')[0]);
-    const authentication = 'google'
+    const safeEmail = normalizeEmail(payload.email);
+    if (!safeEmail) return res.status(400).json({ message: 'Invalid Google email' });
 
-    let user = await User.findOne({ email });
-    if (!user) user = await User.create({ name, email, password: '', authentication }); // Google-only user
+    const name = payload.name || safeEmail.split('@')[0];
+    const authentication = 'google';
+
+    let user = await User.findOne({ email: safeEmail });
+    if (!user) user = await User.create({ name, email: safeEmail, password: '', authentication });
 
     const token = sign(user);
-    res.json({ token, user: { _id: user._id, name: user.name, email: user.email, authentication: user.authentication } });
+    return res.json({ token, user: { _id: user._id, name: user.name, email: user.email, authentication: user.authentication } });
   } catch (e) {
     console.error('[google] error:', e);
-    res.status(401).json({ message: 'Google authentication failed' });
+    return res.status(401).json({ message: 'Google authentication failed' });
   }
 };
 
 export const getMe = (req, res) => {
   const user = req.user;
-
-  console.log("Authenticated user info:", user);
-
   if (!user) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json({ message: 'Unauthorized' });
   }
-
-  // Safely respond with user info excluding sensitive data
   return res.json({
     _id: user._id,
     name: user.name,
