@@ -1,126 +1,123 @@
-const request = require('supertest');
-const express = require('express');
-const mongoose = require('mongoose');
+// src/__tests__/activityController.test.js
+import { jest } from '@jest/globals';
+import { getAllActivities, logActivity } from '../controllers/activityController.js';
+import Activity from '../models/Activity.js';
 
-jest.mock('../models/Activity');
+// ESM-friendly manual mock: override methods on imported class/function
+jest.mock('../models/Activity.js', () => {
+  const saveMock = jest.fn().mockResolvedValue(undefined);
+  const findMock = jest.fn();
 
-const Activity = require('../models/Activity');
-const activityController = require('../controllers/activityController');
+  function ActivityMock(data) {
+    if (data) {
+      this.type = data.type;
+      this.action = data.action;
+      this.targetType = data.targetType;
+      this.targetName = data.targetName;
+      this.actorId = data.actorId;
+      this.actorName = data.actorName;
+      this.save = saveMock;
+    }
+  }
 
-const app = express();
-app.use(express.json());
+  ActivityMock.find = findMock;
+  ActivityMock.__saveMock = saveMock;
+  ActivityMock.__findMock = findMock;
 
-// Wire controller to a test route
-app.get('/api/activities', activityController.getAllActivities);
+  return {
+    __esModule: true,
+    default: ActivityMock
+  };
+});
 
 describe('activityController', () => {
-    afterEach(() => {
-        jest.clearAllMocks();
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('getAllActivities', () => {
+    it('should return activities sorted by timestamp desc (limit 100)', async () => {
+      const mockActivities = [
+        { type: 'project', action: 'created', targetName: 'Test Project' }
+      ];
+
+      const sortMock = jest.fn().mockReturnThis();
+      const limitMock = jest.fn().mockResolvedValue(mockActivities);
+
+      // After jest.mock, Activity is our mocked default export
+      Activity.find.mockReturnValue({
+        sort: sortMock,
+        limit: limitMock
+      });
+
+      const req = {};
+      const res = { json: jest.fn() };
+
+      await getAllActivities(req, res);
+
+      expect(Activity.find).toHaveBeenCalled();
+      expect(sortMock).toHaveBeenCalledWith({ timestamp: -1 }); // or createdAt if controller uses that
+      expect(limitMock).toHaveBeenCalledWith(100);
+      expect(res.json).toHaveBeenCalledWith(mockActivities);
     });
 
-    describe('getAllActivities', () => {
-        it('should return activities sorted by timestamp desc (limit 100)', async () => {
-            const mockActivities = [
-                { _id: 'a1', type: 'project', action: 'created', timestamp: new Date() }
-            ];
+    it('should return 500 on error', async () => {
+      const sortMock = jest.fn().mockReturnThis();
+      const limitMock = jest.fn().mockRejectedValue(new Error('DB error'));
 
-            const sortMock = jest.fn().mockReturnThis();
-            const limitMock = jest.fn().mockResolvedValue(mockActivities);
+      Activity.find.mockReturnValue({
+        sort: sortMock,
+        limit: limitMock
+      });
 
-            Activity.find.mockReturnValue({
-                sort: sortMock,
-                limit: limitMock
-            });
+      const req = {};
+      const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
 
-            const res = await request(app).get('/api/activities');
+      await getAllActivities(req, res);
 
-            expect(Activity.find).toHaveBeenCalledWith();
-            expect(sortMock).toHaveBeenCalledWith({ timestamp: -1 });
-            expect(limitMock).toHaveBeenCalledWith(100);
-            expect(res.status).toBe(200);
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Server error' });
+    });
+  });
 
-            // Instead of deep equality on Date vs string, check fields individually:
-            expect(Array.isArray(res.body)).toBe(true);
-            expect(res.body).toHaveLength(1);
-            expect(res.body[0]._id).toBe('a1');
-            expect(res.body[0].type).toBe('project');
-            expect(res.body[0].action).toBe('created');
-            expect(new Date(res.body[0].timestamp).toISOString()).toBe(
-                mockActivities[0].timestamp.toISOString()
-            );
-        });
+  describe('logActivity', () => {
+    it('should create and save Activity without throwing', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      Activity.__saveMock.mockResolvedValue(undefined);
 
-        it('should return 500 on error', async () => {
-            const sortMock = jest.fn().mockReturnThis();
-            const limitMock = jest.fn().mockRejectedValue(new Error('DB error'));
+      await logActivity({
+        type: 'project',
+        action: 'created',
+        targetType: 'Project',
+        targetName: 'Test Project',
+        actorId: 'u1',
+        actorName: 'User'
+      });
 
-            Activity.find.mockReturnValue({
-                sort: sortMock,
-                limit: limitMock
-            });
-
-            const res = await request(app).get('/api/activities');
-
-            expect(res.status).toBe(500);
-            expect(res.body).toEqual({ error: 'Server error' });
-        });
+      expect(Activity.__saveMock).toHaveBeenCalled();
+      expect(consoleSpy).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
     });
 
-    describe('logActivity', () => {
-        it('should create and save Activity without throwing', async () => {
-            const saveMock = jest.fn().mockResolvedValue(undefined);
-            Activity.mockImplementation(function ActivityDoc(data) {
-                this.type = data.type;
-                this.action = data.action;
-                this.targetType = data.targetType;
-                this.targetName = data.targetName;
-                this.actorId = data.actorId;
-                this.actorName = data.actorName;
-                this.save = saveMock;
-            });
+    it('should catch errors and log them', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      Activity.__saveMock.mockRejectedValue(new Error('Save failed'));
 
-            const payload = {
-                type: 'project',
-                action: 'created',
-                targetType: 'Project',
-                targetName: 'ProjectHub',
-                actorId: 'u1',
-                actorName: 'User 1'
-            };
+      await logActivity({
+        type: 'project',
+        action: 'updated',
+        targetType: 'Project',
+        targetName: 'Test Project',
+        actorId: 'u1',
+        actorName: 'User'
+      });
 
-            await activityController.logActivity(payload);
-
-            expect(saveMock).toHaveBeenCalled();
-        });
-
-        it('should catch errors and not throw when save fails', async () => {
-            const saveMock = jest.fn().mockRejectedValue(new Error('Save failed'));
-            const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
-
-            Activity.mockImplementation(function ActivityDoc(data) {
-                this.type = data.type;
-                this.action = data.action;
-                this.targetType = data.targetType;
-                this.targetName = data.targetName;
-                this.actorId = data.actorId;
-                this.actorName = data.actorName;
-                this.save = saveMock;
-            });
-
-            const payload = {
-                type: 'task',
-                action: 'updated',
-                targetType: 'Task',
-                targetName: 'Task 1',
-                actorId: 'u2',
-                actorName: 'User 2'
-            };
-
-            await expect(activityController.logActivity(payload)).resolves.toBeUndefined();
-            expect(saveMock).toHaveBeenCalled();
-            expect(consoleSpy).toHaveBeenCalled();
-
-            consoleSpy.mockRestore();
-        });
+      expect(Activity.__saveMock).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Activity log failed'),
+        expect.any(Error)
+      );
+      consoleSpy.mockRestore();
     });
+  });
 });
