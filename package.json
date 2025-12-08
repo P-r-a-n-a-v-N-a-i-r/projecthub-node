@@ -8,7 +8,7 @@
     "dev": "nodemon src/server.js",
     "build": "tsc",
     "test": "jest",
-    "test:coverage": "jest --coverage --coverageReporters=text-lcov --collectCoverageFrom='src/**/*.js'",
+    "test:coverage": "jest --coverage --coverageReporters=lcov --collectCoverageFrom='src/**/*.js' --coverageDirectory=coverage",
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage --coverageReporters=lcov --reporters=default --reporters=jest-junit",
     "lint": "eslint src/**/*.js",

@@ -9,19 +9,57 @@ env:
   SONAR_ORG: p-r-a-n-a-v-n-a-i-r
 
 jobs:
-  # --- 1. SONARQUBE SAST ---
-  sonarqube:
-    name: SonarQube SAST
+  # --- 0. TESTS (NEW) ---
+  test:
+    name: Run Tests + Coverage
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run tests
+        run: npm test
+        
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+  # --- 1. SONARQUBE SAST + COVERAGE (UPDATED) ---
+  sonarqube:
+    name: SonarQube SAST + Coverage
+    runs-on: ubuntu-latest
+    needs: test  # ✅ Runs after tests
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Generate coverage for SonarQube
+        run: npm run test:coverage
+        
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.javascript.lcov.reportPaths=./coverage/lcov.info
 
   # --- 2. SNYK SCA (npm vulnerabilities - 35% marks!) ---
   snyk:
@@ -112,4 +150,4 @@ jobs:
               -e BREVO_API_KEY='$BREVO_API_KEY' \
               -e GOOGLE_CLIENT_ID='$GOOGLE_CLIENT_ID' \
               $IMAGE_NAME:latest
-          "
+            "
