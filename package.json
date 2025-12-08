@@ -1,15 +1,29 @@
 {
   "name": "projecthub-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "ProjectHub Backend API - Fullstack AgTech Platform",
+  "main": "dist/server.js",
   "scripts": {
-  "start": "node src/server.js",
-  "dev": "nodemon src/server.js"
-},
-  "keywords": [],
-  "author": "",
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "build": "tsc",
+    "test": "jest",
+    "test:coverage": "jest --coverage --coverageReporters=text-lcov --collectCoverageFrom='src/**/*.js'",
+    "test:watch": "jest --watch",
+    "test:ci": "jest --ci --coverage --coverageReporters=lcov --reporters=default --reporters=jest-junit",
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix"
+  },
+  "keywords": [
+    "projecthub",
+    "agtech",
+    "api",
+    "plant-disease",
+    "ai"
+  ],
+  "author": "ProjectHub Team",
   "license": "ISC",
+  "type": "commonjs",
   "dependencies": {
     "aws-sdk": "^2.1692.0",
     "axios": "^1.13.2",
@@ -25,6 +39,47 @@
     "sib-api-v3-sdk": "^8.5.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
-  }
+    "@babel/core": "^7.28.5",
+    "@babel/preset-env": "^7.28.5",
+    "@types/bcrypt": "^5.0.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^22.7.4",
+    "@types/supertest": "^6.0.3",
+    "babel-jest": "^30.2.0",
+    "eslint": "^9.11.1",
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.10",
+    "nyc": "^17.1.0",
+    "supertest": "^7.1.4",
+    "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  },
+  "jest": {
+  "testEnvironment": "node",
+  "roots": ["<rootDir>/src"],
+  "testMatch": [
+    "**/__tests__/**/*.test.js",
+    "**/?(*.)+(spec|test).js"
+  ],
+  "transform": {
+    "^.+\\.js$": "babel-jest"
+  },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(mongoose)/)"
+  ],
+  "moduleFileExtensions": ["js", "json", "node"],
+  "coverageDirectory": "./coverage",
+  "collectCoverageFrom": [
+    "src/**/*.js",
+    "!src/**/__tests__/**",
+    "!src/config/**",
+    "!src/server.js"
+  ],
+  "coverageReporters": ["text", "lcov", "html"]
+}
+
 }
