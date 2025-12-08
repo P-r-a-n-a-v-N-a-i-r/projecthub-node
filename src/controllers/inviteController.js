@@ -2,7 +2,7 @@ import axios from 'axios';
 
 export const sendInviteEmail = async (req, res) => {
   const { email, subject } = req.body;
-  const inviteLink = "http://localhost:4200/auth";
+  const inviteLink = "http://www.projecthub.lol/auth?mode=signup";
 
   if (!email) {
     return res.status(400).json({ success: false, message: 'Email is required' });
