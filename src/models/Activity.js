@@ -1,5 +1,5 @@
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
+import mongoose from 'mongoose';
+const { Schema } = mongoose;
 
 const ActivitySchema = new Schema({
   type: { type: String, required: true },      // 'project' | 'task'
@@ -11,4 +11,4 @@ const ActivitySchema = new Schema({
   timestamp: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model('Activity', ActivitySchema);
+export default mongoose.model('Activity', ActivitySchema);

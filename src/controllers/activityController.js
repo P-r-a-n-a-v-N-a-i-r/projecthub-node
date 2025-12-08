@@ -1,7 +1,7 @@
-const Activity = require('../models/Activity');
+import Activity from '../models/Activity.js';
 
 // Get all activities (latest first)
-exports.getAllActivities = async (req, res) => {
+export const getAllActivities = async (req, res) => {
   try {
     const activities = await Activity.find().sort({ timestamp: -1 }).limit(100);
     res.json(activities);
@@ -10,8 +10,8 @@ exports.getAllActivities = async (req, res) => {
   }
 };
 
-// Log an activity (call this from your project/task controllers)
-exports.logActivity = async ({ type, action, targetType, targetName, actorId, actorName }) => {
+// Log an activity
+export const logActivity = async ({ type, action, targetType, targetName, actorId, actorName }) => {
   try {
     const activity = new Activity({
       type,

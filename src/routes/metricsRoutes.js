@@ -1,8 +1,9 @@
-const express = require('express');
+import express from 'express';
+import { getMetrics } from '../controllers/metricsController.js';
+
 const router = express.Router();
-const metricsController = require('../controllers/metricsController');
 
 // GET /api/metrics
-router.get('/', metricsController.getMetrics);
+router.get('/', getMetrics);
 
-module.exports = router;
+export default router;

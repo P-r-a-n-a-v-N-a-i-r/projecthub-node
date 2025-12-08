@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "ProjectHub Backend API - Fullstack AgTech Platform",
   "main": "dist/server.js",
-  "type": "module",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
@@ -24,7 +23,7 @@
   ],
   "author": "ProjectHub Team",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "aws-sdk": "^2.1692.0",
     "axios": "^1.13.2",
